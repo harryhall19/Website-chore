@@ -1,0 +1,279 @@
+import React, { useState, useEffect } from 'react';
+import { Check, Plus, Trash2, RotateCcw, Users, RefreshCw } from 'lucide-react';
+
+export default function ChoreTracker() {
+  const [chores, setChores] = useState([]);
+  const [newChore, setNewChore] = useState('');
+  const [newPerson, setNewPerson] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [lastSync, setLastSync] = useState(null);
+
+  useEffect(() => {
+    loadChores();
+    const interval = setInterval(loadChores, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadChores = async () => {
+    try {
+      const result = await window.storage.get('household-chores', true);
+      if (result) {
+        setChores(JSON.parse(result.value));
+        setLastSync(new Date());
+      }
+    } catch (error) {
+      console.log('No chores found yet');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveChores = async (updatedChores) => {
+    try {
+      await window.storage.set('household-chores', JSON.stringify(updatedChores), true);
+      setChores(updatedChores);
+      setLastSync(new Date());
+    } catch (error) {
+      console.error('Error saving chores:', error);
+    }
+  };
+
+  const addChore = () => {
+    if (!newChore.trim()) return;
+
+    const chore = {
+      id: Date.now(),
+      task: newChore,
+      person: newPerson || 'Unassigned',
+      completed: false,
+      createdAt: new Date().toISOString(),
+      addedBy: 'Family Member'
+    };
+
+    saveChores([...chores, chore]);
+    setNewChore('');
+    setNewPerson('');
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      addChore();
+    }
+  };
+
+  const toggleChore = (id) => {
+    const updated = chores.map(chore =>
+      chore.id === id ? { ...chore, completed: !chore.completed, completedAt: !chore.completed ? new Date().toISOString() : null } : chore
+    );
+    saveChores(updated);
+  };
+
+  const deleteChore = (id) => {
+    saveChores(chores.filter(chore => chore.id !== id));
+  };
+
+  const resetAll = () => {
+    const updated = chores.map(chore => ({ ...chore, completed: false, completedAt: null }));
+    saveChores(updated);
+  };
+
+  const filteredChores = chores.filter(chore => {
+    if (filter === 'active') return !chore.completed;
+    if (filter === 'completed') return chore.completed;
+    return true;
+  });
+
+  const stats = {
+    total: chores.length,
+    completed: chores.filter(c => c.completed).length,
+    active: chores.filter(c => !c.completed).length
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading chores...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+      <div className="max-w-4xl mx-auto p-6 space-y-6">
+        {/* Header */}
+        <div className="text-center space-y-2 pt-8">
+          <div className="flex items-center justify-center gap-2">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+              Household Chores
+            </h1>
+            <div className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-3 py-1 rounded-full">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              Synced
+            </div>
+          </div>
+          <p className="text-gray-600">Shared with everyone in your household</p>
+          {lastSync && (
+            <p className="text-xs text-gray-400">
+              Last updated: {lastSync.toLocaleTimeString()}
+            </p>
+          )}
+        </div>
+
+        {/* Sync Button */}
+        <div className="flex justify-center">
+          <button
+            onClick={loadChores}
+            className="flex items-center gap-2 px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+          >
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="text-2xl font-bold text-indigo-600">{stats.total}</div>
+            <div className="text-sm text-gray-600">Total</div>
+          </div>
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
+            <div className="text-sm text-gray-600">Completed</div>
+          </div>
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="text-2xl font-bold text-orange-600">{stats.active}</div>
+            <div className="text-sm text-gray-600">Active</div>
+          </div>
+        </div>
+
+        {/* Add Chore Section */}
+        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Chore Task
+              </label>
+              <input
+                type="text"
+                value={newChore}
+                onChange={(e) => setNewChore(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="e.g., Vacuum living room"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Assigned To
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newPerson}
+                  onChange={(e) => setNewPerson(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="e.g., Sarah"
+                  className="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                />
+                <button
+                  onClick={addChore}
+                  className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg flex items-center gap-2 font-medium"
+                >
+                  <Plus size={20} />
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="flex gap-2 justify-center">
+          {['all', 'active', 'completed'].map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-6 py-2 rounded-full font-medium transition-all ${
+                filter === f
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        {/* Chore List */}
+        <div className="space-y-3">
+          {filteredChores.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              {filter === 'all' ? 'No chores yet. Add one above!' : `No ${filter} chores.`}
+            </div>
+          ) : (
+            filteredChores.map(chore => (
+              <div
+                key={chore.id}
+                className={`bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-all ${
+                  chore.completed ? 'opacity-60' : ''
+                }`}
+              >
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => toggleChore(chore.id)}
+                    className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                      chore.completed
+                        ? 'bg-green-500 border-green-500'
+                        : 'border-gray-300 hover:border-indigo-500'
+                    }`}
+                  >
+                    {chore.completed && <Check size={16} className="text-white" />}
+                  </button>
+                  
+                  <div className="flex-1">
+                    <div className={`font-medium ${chore.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                      {chore.task}
+                    </div>
+                    <div className="flex items-center gap-1 text-sm text-gray-500 mt-1">
+                      <Users size={14} />
+                      {chore.person}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => deleteChore(chore.id)}
+                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Reset Button */}
+        {stats.completed > 0 && (
+          <div className="text-center">
+            <button
+              onClick={resetAll}
+              className="px-6 py-3 bg-white text-indigo-600 rounded-xl hover:bg-gray-50 transition-all shadow-md hover:shadow-lg flex items-center gap-2 font-medium mx-auto border border-indigo-200"
+            >
+              <RotateCcw size={18} />
+              Reset All Chores
+            </button>
+          </div>
+        )}
+
+        {/* Info Footer */}
+        <div className="text-center text-xs text-gray-400 pb-4">
+          This chore list is shared with everyone who has access to this app
+        </div>
+      </div>
+    </div>
+  );
+}
